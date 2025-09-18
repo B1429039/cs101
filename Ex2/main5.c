@@ -2,7 +2,7 @@
 
 int main()
 {
-    char grade ='H';
+    char grade ='B';
     printf("Your grade is %c\n",grade);
     switch (grade) {
         case 'A':
