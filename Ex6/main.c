@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+
 typedef struct employee {
     int id;
     char name[12];
@@ -16,6 +17,7 @@ void emp_writefile(employee_t emp[], int n) {
     fclose(fp);
     return;
 }
+
 void emp_readfile(employee_t emp[], int n) { 
     FILE* fp = fopen("employee.bin", "rb");
     int i = 0;
@@ -33,6 +35,7 @@ void emp_info(employee_t emp) {
     printf("employee age =%d\n", emp.age);
     printf("employee salary = %02f\n\n", emp.salary);
 }
+
 int emp_average_age(employee_t emp[], int n) {
     int sum =0;
     for (int i=0;i<3;i++) {
@@ -69,3 +72,4 @@ int main()
     }
     return 0;
 }
+
