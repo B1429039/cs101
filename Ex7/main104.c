@@ -1,15 +1,12 @@
 #include <stdio.h>
+int add_func(int a, int b) {
+    return a+b;
+}
+
 int main() {
-    char* names[] = {
-        "IU",
-        "IU Lee",
-        "李知恩"
-    };
-    
-    char* (*ptr)[3];
-    ptr = &names;
-    for (int i = 0; i<3; i++) {
-        printf("ptr[%d] = %s\n", i, *(*ptr+i));
-    }
+    int n=10, m=1;
+    int (*func_ptr)(int, int);
+    func_ptr = add_func;
+    printf("%d\n", func_ptr(n,m));
    return 0;
 }
