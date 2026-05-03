@@ -1,0 +1,18 @@
+#include <iostream>
+using namespace std;
+
+int gcd(int a, int b) {
+    if (b == 0) return a;
+    return gcd(b, a % b); 
+}
+
+int main() {
+    int a, b;
+    cout << "請輸入兩個整數（以空格隔開）：";
+    cin >> a >> b;
+    
+    cout << "最大公因數為：" << gcd(a, b) << endl;
+    
+    return 0;
+
+}
