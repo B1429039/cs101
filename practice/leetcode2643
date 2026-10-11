@@ -1,0 +1,30 @@
+class Solution {
+public:
+    vector<int> rowAndMaximumOnes(vector<vector<int>>& mat) {
+        int max_1=0;
+        int best_row=0;
+
+        int rows=mat.size();
+
+        for (int i=0;i<rows;i++){
+            int current_1=0;
+            int columns=mat[i].size();
+
+        for (int j=0;j<columns;j++){
+            if(mat[i][j]==1){
+                current_1++;
+            }
+        }
+        
+
+        if (current_1>max_1){
+            max_1=current_1;
+            best_row=i;
+        }
+
+        }
+
+        return {best_row,max_1};
+        
+    }
+};
