@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>回報失物｜小迷糊</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body class="link-page">
+  <main class="shell"><section class="link-card">
+    <a class="brand" href="{{ url_for('home') }}"><span class="brand-mark">🔎</span><span>小迷糊</span></a>
+    <h1>一起讓失物回家</h1><p>選擇你要使用的校園服務，或回到網站瀏覽最新刊登。</p>
+    <div class="link-list">
+      <a class="link-item" href="{{ url_for('home') }}"><span class="link-icon">🔎</span><span><strong>瀏覽網站上的失物</strong><span>搜尋遺失物與拾獲物</span></span><span class="link-arrow">›</span></a>
+      {% for name, url in links.items() %}
+        <a class="link-item" href="{{ url }}"><span class="link-icon">{{ {'圖書館':'📚', '學務處':'🏫', '我們的網頁':'🌐'}.get(name, '🔗') }}</span><span><strong>{{ name }}</strong><span>前往相關服務</span></span><span class="link-arrow">›</span></a>
+      {% endfor %}
+    </div>
+  </section></main>
+</body>
+</html>

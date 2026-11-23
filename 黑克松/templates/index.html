@@ -1,1 +1,56 @@
-
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="長庚大學校園失物招領，快速找回遺失物，也讓拾獲物回到主人身邊。">
+  <title>小迷糊｜校園失物招領</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <header class="topbar"><div class="shell topbar-inner">
+    <a class="brand" href="{{ url_for('home') }}"><span class="brand-mark">🔎</span><span>小迷糊</span></a>
+    <nav class="nav" aria-label="主要導覽">
+      <a href="#posts">最新物品</a>
+      {% for name, url in links.items() %}<a href="{{ url }}">{{ name }}</a>{% endfor %}
+      <a class="button button-primary" href="{{ url_for('lost_found_landing_page') }}">我要回報</a>
+    </nav>
+  </div></header>
+  <main class="shell">
+    <section class="hero"><div class="hero-copy">
+      <p class="eyebrow">CAMPUS LOST &amp; FOUND</p>
+      <h1>讓每件遺失物，<br>都能回到正確的人手上。</h1>
+      <p>在校園裡不小心忘了東西？先搜尋看看。你也可以透過 LINE 回報遺失或拾獲，讓大家一起幫忙找回來。</p>
+      <div class="hero-actions"><a class="button button-light" href="#posts">瀏覽最新物品 ↓</a><a class="button button-primary" href="{{ url_for('lost_found_landing_page') }}">查看回報方式</a></div>
+    </div></section>
+    {% set lost_count = posts | selectattr('kind', 'equalto', 'lost') | list | length %}
+    {% set found_count = posts | selectattr('kind', 'equalto', 'found') | list | length %}
+    <section class="stats" aria-label="資料統計">
+      <div class="stat"><span class="stat-number">{{ posts | length }}</span><span class="stat-label">目前刊登</span></div>
+      <div class="stat"><span class="stat-number">{{ lost_count }}</span><span class="stat-label">尋找中的遺失物</span></div>
+      <div class="stat"><span class="stat-number">{{ found_count }}</span><span class="stat-label">等待認領的拾獲物</span></div>
+    </section>
+    <section id="posts">
+      <div class="section-heading"><div><h2>最新物品</h2><p>由 LINE 回報的校園失物資訊會出現在這裡</p></div></div>
+      <div class="controls">
+        <label class="search"><span class="search-icon">⌕</span><input data-search type="search" placeholder="搜尋物品、顏色或地點…" aria-label="搜尋失物"></label>
+        <div class="filters" role="group" aria-label="篩選物品類型"><button class="filter active" data-filter="all" type="button">全部</button><button class="filter" data-filter="lost" type="button">遺失物</button><button class="filter" data-filter="found" type="button">拾獲物</button></div>
+      </div>
+      <div class="posts">
+        {% for post in posts %}
+          <article class="post-card" data-post data-type="{{ post.kind }}">
+            {% if post.photos %}<img class="post-photo" src="{{ post.photos[0] }}" alt="{{ post.title }}照片" loading="lazy">{% endif %}
+            <div class="post-content"><div class="post-top"><span class="badge {% if post.kind == 'found' %}badge-found{% else %}badge-lost{% endif %}">{% if post.kind == 'found' %}✦ 拾獲物{% else %}⌁ 遺失物{% endif %}</span><time class="post-time" datetime="{{ post.created_at }}">{{ post.display_time }}</time></div>
+              <h3 class="post-title">{{ post.title }}</h3><p class="post-description">{{ post.content }}</p>
+              <div class="post-foot"><span class="status">{{ '待確認' if post.status == 'pending' else post.status }}</span><span>編號 #{{ post.id }}</span></div>
+            </div>
+          </article>
+        {% else %}<div class="empty"><strong>目前還沒有失物資料</strong><span>有新的回報後，資訊會自動顯示在這裡。</span></div>{% endfor %}
+        <div class="empty" data-filter-empty hidden><strong>找不到符合的物品</strong><span>換個關鍵字，或切換上方的分類試試看。</span></div>
+      </div>
+    </section>
+  </main>
+  <footer class="footer"><div class="shell"><div>小迷糊・校園失物招領</div><div class="footer-links">{% for name, url in links.items() %}<a href="{{ url }}">{{ name }}</a>{% endfor %}<a href="{{ url_for('api_posts') }}">資料 API</a></div></div></footer>
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</body>
+</html>
