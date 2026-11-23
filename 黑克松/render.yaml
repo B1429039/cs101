@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: campus-lost-found-bot
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: CHANNEL_SECRET
+        sync: false
+      - key: CHANNEL_ACCESS_TOKEN
+        sync: false
+      - key: CGU_API_KEY
+        sync: false
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: OUR_SITE_URL
+        sync: false
+      - key: REPLY_IN_GROUP
+        value: "1"
