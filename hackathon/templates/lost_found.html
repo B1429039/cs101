@@ -7,15 +7,26 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body class="link-page">
-  <main class="shell"><section class="link-card">
-    <a class="brand" href="{{ url_for('home') }}"><span class="brand-mark">🔎</span><span>小迷糊</span></a>
-    <h1>一起讓失物回家</h1><p>選擇你要使用的校園服務，或回到網站瀏覽最新刊登。</p>
-    <div class="link-list">
-      <a class="link-item" href="{{ url_for('home') }}"><span class="link-icon">🔎</span><span><strong>瀏覽網站上的失物</strong><span>搜尋遺失物與拾獲物</span></span><span class="link-arrow">›</span></a>
+  <header class="portal-header">
+    <a class="portal-brand" href="{{ url_for('home') }}"><span class="brand-mark">🔎</span><span>小迷糊</span></a>
+    <div class="portal-title"><strong>小迷糊</strong><span></span><strong>校園失物招領</strong></div>
+  </header>
+  <main class="portal-shell">
+    <p class="portal-eyebrow">LOST &amp; FOUND</p>
+    <h1>失物招領入口</h1>
+    <div class="portal-list">
       {% for name, url in links.items() %}
-        <a class="link-item" href="{{ url }}"><span class="link-icon">{{ {'圖書館':'📚', '學務處':'🏫', '我們的網頁':'🌐'}.get(name, '🔗') }}</span><span><strong>{{ name }}</strong><span>前往相關服務</span></span><span class="link-arrow">›</span></a>
+        <a class="portal-item portal-item-{{ loop.index }}" href="{{ url }}">
+          <span class="portal-number">0{{ loop.index }}</span>
+          <span class="portal-icon">{{ {'圖書館':'▤', '學務處':'⌂', '我們的網頁':'◌'}.get(name, '↗') }}</span>
+          <span class="portal-copy">
+            <strong>{% if name == '我們的網頁' %}前往我們的網頁{% else %}前往{{ name }}失物招領{% endif %}</strong>
+            <small>{% if name == '圖書館' %}查看圖書館內拾獲的物品{% elif name == '學務處' %}查看學務處保管中的物品{% else %}瀏覽校園失物資訊與最新公告{% endif %}</small>
+          </span>
+          <span class="portal-arrow">↗</span>
+        </a>
       {% endfor %}
     </div>
-  </section></main>
+  </main>
 </body>
 </html>
