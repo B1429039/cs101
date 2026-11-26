@@ -32,7 +32,7 @@ AI_MODEL = os.getenv("AI_MODEL", "gpt-oss-120b")
 
 MIN_CONFIDENCE = float(os.getenv("MIN_CONFIDENCE", "0.7"))      # AI 信心低於這個值就不記錄
 REPLY_IN_GROUP = os.getenv("REPLY_IN_GROUP", "0") == "1"        # 群組裡要不要回覆（預設安靜）
-PHOTO_WINDOW = int(os.getenv("PHOTO_WINDOW_SECONDS", "180"))    # 失物文字之後幾秒內的照片算同一筆
+PHOTO_WINDOW = int(os.getenv("PHOTO_WINDOW_SECONDS", "30"))     # 文字和照片需在 30 秒內配對
 MAX_PHOTOS = 5                                                  # 每筆失物最多幾張照片
 MAX_PHOTO_BYTES = 10 * 1024 * 1024
 UPLOAD_DIR = Path(app.root_path) / "static" / "uploads"
@@ -66,7 +66,6 @@ FOUND_KEYWORDS = (
 
 # 物品或描述含這些字，照片不公開（證件、卡片有個資）
 SENSITIVE_WORDS = ("證", "卡", "護照", "存摺")
-
 
 # ============================ 資料庫 ============================
 def db():
@@ -359,7 +358,8 @@ def record_report(analysis: dict, text: str) -> int:
 
 
 # ============================ 照片配對 ============================
-# 只放在記憶體：誰剛剛發了失物文字 → 之後 PHOTO_WINDOW 秒內他傳的照片算這一筆。
+# 只放在記憶體：文字和照片在 PHOTO_WINDOW 秒內互相配對。
+# 因此支援「先文字後照片」和「先照片後文字」兩種順序。
 # 不寫進資料庫。（若用多個 worker 部署，這份暫存不會共用，請只開一個 worker。）
 PENDING: dict = {}
 PENDING_LOCK = threading.Lock()
@@ -375,13 +375,66 @@ def remember_for_photo(key: str, post_id: int, sensitive: bool):
     now = time.time()
     with PENDING_LOCK:
         for expired in [k for k, v in PENDING.items() if v["expires"] < now]:
+            for filename in PENDING[expired].get("photos", []):
+                (UPLOAD_DIR / filename).unlink(missing_ok=True)
             del PENDING[expired]
-        PENDING[key] = {"post_id": post_id, "sensitive": sensitive,
-                        "expires": now + PHOTO_WINDOW, "count": 0, "noted": False}
+        previous = PENDING.get(key, {})
+        PENDING[key] = {
+            "post_id": post_id,
+            "sensitive": sensitive,
+            "expires": now + PHOTO_WINDOW,
+            "count": previous.get("count", 0),
+            "noted": previous.get("noted", False),
+            "photos": previous.get("photos", []),
+            "photo_prompted": previous.get("photo_prompted", False),
+        }
+
+
+def attach_pending_photos(key: str, post_id: int, sensitive: bool):
+    """把先傳的照片掛到剛建立的貼文；敏感物品則刪除暫存照片。"""
+    with PENDING_LOCK:
+        pending = PENDING.get(key)
+        filenames = list(pending.get("photos", [])) if pending else []
+        if pending:
+            pending["photos"] = []
+
+    if not filenames:
+        return
+    if sensitive:
+        for filename in filenames:
+            (UPLOAD_DIR / filename).unlink(missing_ok=True)
+        with db() as connection:
+            connection.execute(
+                "UPDATE posts SET content = content || ? WHERE id = ?",
+                ("\n（附有照片，因可能含個資不公開，請洽失物處理單位）", post_id),
+            )
+        return
+
+    final_names = []
+    for filename in filenames:
+        source = UPLOAD_DIR / filename
+        if not source.exists():
+            continue
+        final_name = f"{post_id}_{filename.removeprefix('pending_')}"
+        source.rename(UPLOAD_DIR / final_name)
+        final_names.append(final_name)
+    if final_names:
+        photo_value = ",".join(final_names)
+        with db() as connection:
+            connection.execute(
+                "UPDATE posts SET photo = CASE WHEN photo IS NULL OR photo = '' THEN ? ELSE photo || ',' || ? END WHERE id = ?",
+                (photo_value, photo_value, post_id),
+            )
 
 
 def should_reply(event: dict) -> bool:
     return event.get("source", {}).get("type") == "user" or REPLY_IN_GROUP
+
+
+def has_pending_photos(key: str) -> bool:
+    with PENDING_LOCK:
+        pending = PENDING.get(key)
+        return bool(pending and pending.get("photos") and pending["expires"] >= time.time())
 
 
 # ============================ 事件處理 ============================
@@ -396,8 +449,11 @@ def handle_text(event: dict, text: str):
         reply_messages(reply_token, [build_menu_flex(only=text)])
         return
 
-    # 2) 粗篩：與失物無關的聊天直接略過，不呼叫 AI、不記錄
+    # 2) 粗篩：與失物無關的聊天直接略過，不呼叫 AI、不記錄。
+    # 若前面已先傳照片，提示使用者補充「遺失」或「拾獲」，避免照片無法配對。
     if not any(keyword in text for keyword in PREFILTER):
+        if has_pending_photos(source_key(event)) and should_reply(event):
+            reply_text(reply_token, "已收到照片，請補充這是遺失物還是拾獲物，以及物品和地點。")
         return
 
     # 3) 判斷是遺失還是拾獲
@@ -408,13 +464,16 @@ def handle_text(event: dict, text: str):
         return
 
     post_id = record_report(analysis, text)
-    remember_for_photo(source_key(event), post_id, is_sensitive(analysis, text))
+    key = source_key(event)
+    sensitive = is_sensitive(analysis, text)
+    remember_for_photo(key, post_id, sensitive)
+    attach_pending_photos(key, post_id, sensitive)
 
     if should_reply(event):
         if analysis["type"] == "lost":
             reply_text(reply_token, f"已記錄遺失資訊，可到 {PUBLIC_BASE_URL}/lost-found 查看。")
         else:
-            reply_text(reply_token, "已記錄拾獲物，資料會以待確認狀態更新到網站。若有照片，請在 3 分鐘內傳送。")
+            reply_text(reply_token, "已記錄拾獲物，資料會以待確認狀態更新到網站。")
 
 
 def handle_image(event: dict, message: dict):
@@ -422,17 +481,28 @@ def handle_image(event: dict, message: dict):
     if message.get("contentProvider", {}).get("type", "line") != "line":
         return
     key = source_key(event)
+    now = time.time()
     with PENDING_LOCK:
         pending = PENDING.get(key)
-        if not pending or pending["expires"] < time.time():
-            return                              # 沒有對應的失物文字，忽略這張照片
-        post_id = pending["post_id"]
+        if pending and pending["expires"] < now:
+            for filename in pending.get("photos", []):
+                (UPLOAD_DIR / filename).unlink(missing_ok=True)
+            del PENDING[key]
+            pending = None
+        if not pending:
+            # 先收到照片時先暫存，等 PHOTO_WINDOW 秒內的文字描述再配對。
+            pending = {
+                "post_id": None, "sensitive": False, "expires": now + PHOTO_WINDOW,
+                "count": 0, "noted": False, "photos": [], "photo_prompted": False,
+            }
+            PENDING[key] = pending
+        post_id = pending.get("post_id")
         if pending["sensitive"]:
             first_note = not pending["noted"]
             pending["noted"] = True
             download = False
         else:
-            if pending["count"] >= MAX_PHOTOS:
+            if len(pending.get("photos", [])) >= MAX_PHOTOS:
                 return
             pending["count"] += 1
             first_note = False
@@ -450,15 +520,30 @@ def handle_image(event: dict, message: dict):
     data, extension = download_line_image(message["id"])
     if not data:
         return
-    filename = f"{post_id}_{message['id']}.{extension}"
+    if post_id is None:
+        key_hash = hashlib.sha256(key.encode()).hexdigest()[:12]
+        filename = f"pending_{key_hash}_{message['id']}.{extension}"
+    else:
+        filename = f"{post_id}_{message['id']}.{extension}"
     (UPLOAD_DIR / filename).write_bytes(data)
-    with db() as connection:
-        connection.execute(
-            "UPDATE posts SET photo = CASE WHEN photo IS NULL OR photo = '' THEN ? ELSE photo || ',' || ? END WHERE id = ?",
-            (filename, filename, post_id),
-        )
-    if should_reply(event):
-        reply_text(event.get("replyToken"), "照片已加到網站。")
+    if post_id is None:
+        with PENDING_LOCK:
+            pending = PENDING.get(key)
+            prompt = bool(pending and not pending.get("photo_prompted", False))
+            if pending:
+                pending["photos"].append(filename)
+                pending["photo_prompted"] = True
+        # 群組裡可能有大量一般照片，先不回覆以免洗版；私訊只提醒一次。
+        if prompt and event.get("source", {}).get("type") == "user":
+            reply_text(event.get("replyToken"), "已收到照片，請再傳送遺失或拾獲的文字描述。")
+    else:
+        with db() as connection:
+            connection.execute(
+                "UPDATE posts SET photo = CASE WHEN photo IS NULL OR photo = '' THEN ? ELSE photo || ',' || ? END WHERE id = ?",
+                (filename, filename, post_id),
+            )
+        if event.get("source", {}).get("type") == "user":
+            reply_text(event.get("replyToken"), "照片已加到網站。")
 
 
 def handle_event(event: dict):
